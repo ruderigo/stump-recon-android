@@ -109,14 +109,16 @@ jobs:
       - name: Publish GitHub Release with APK & Heltec V3 .bin
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           TAG="${GITHUB_REF_NAME}"
           APK="release-assets/stump-recon-android-${TAG}.apk"
           BIN="release-assets/stump-heltec-v3-merged-${TAG}.bin"
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release upload "${TAG}" "${APK}" "${BIN}" --clobber
+          if gh release view "${TAG}" -R "${GH_REPO}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" "${APK}" "${BIN}" -R "${GH_REPO}" --clobber
           else
             gh release create "${TAG}" "${APK}" "${BIN}" \
+              -R "${GH_REPO}" \
               --title "STUMP Recon Android + Heltec V3 Firmware ${TAG}" \
               --generate-notes
           fi
