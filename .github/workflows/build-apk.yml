@@ -1,4 +1,4 @@
-name: Build STUMP Recon Android APK
+name: Build STUMP Recon Android APK & Heltec V3 Firmware
 
 on:
   push:
@@ -44,17 +44,79 @@ jobs:
           name: stump-recon-android-apk
           path: stump-recon-android-*.apk
 
-      - name: Publish GitHub Release on Tag
-        if: startsWith(github.ref, 'refs/tags/v')
+  build-heltec-v3-firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-heltec-v3-${{ hashFiles('firmware/platformio.ini') }}
+          restore-keys: pio-heltec-v3-
+
+      - name: Install PlatformIO
+        run: pip install --no-cache-dir platformio
+
+      - name: Compile Heltec V3 Merged Firmware (.bin)
+        working-directory: firmware
+        run: pio run -e heltec_wifi_lora_32_V3
+
+      - name: Package & Verify Heltec V3 Merged Binary
+        run: |
+          VER="${GITHUB_REF_NAME//\//-}"
+          SRC="firmware/.pio/build/heltec_wifi_lora_32_V3/stump_heltec_wifi_lora_32_V3_merged.bin"
+          DST="stump-heltec-v3-merged-${VER}.bin"
+          cp "$SRC" "$DST"
+          python3 -c "
+          b = open('$DST', 'rb').read()
+          assert len(b) > 0x10000, f'Binary too small: {len(b)}'
+          assert b[0] == 0xE9, f'Bad ESP32 magic: {hex(b[0])}'
+          assert b[0x8000] == 0xAA and b[0x8001] == 0x50, 'Missing partition table at 0x8000'
+          print(f'Verified {len(b)} bytes (ESP32-S3 magic 0xE9 + partition table @ 0x8000 OK)')
+          "
+
+      - name: Upload Heltec V3 Firmware Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stump-heltec-v3-firmware-bin
+          path: stump-heltec-v3-merged-*.bin
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ build-apk, build-heltec-v3-firmware ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APK Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: stump-recon-android-apk
+          path: release-assets
+
+      - name: Download Heltec V3 Firmware Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: stump-heltec-v3-firmware-bin
+          path: release-assets
+
+      - name: Publish GitHub Release with APK & Heltec V3 .bin
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
-          APK="stump-recon-android-${TAG}.apk"
+          APK="release-assets/stump-recon-android-${TAG}.apk"
+          BIN="release-assets/stump-heltec-v3-merged-${TAG}.bin"
           if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release upload "${TAG}" "${APK}" --clobber
+            gh release upload "${TAG}" "${APK}" "${BIN}" --clobber
           else
-            gh release create "${TAG}" "${APK}" \
-              --title "STUMP Recon Android ${TAG}" \
+            gh release create "${TAG}" "${APK}" "${BIN}" \
+              --title "STUMP Recon Android + Heltec V3 Firmware ${TAG}" \
               --generate-notes
           fi

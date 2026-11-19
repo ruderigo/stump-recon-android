@@ -7,3 +7,7 @@ local.properties
 .DS_Store
 *.jks
 *.keystore
+
+# PlatformIO
+firmware/.pio/
+.pio/
