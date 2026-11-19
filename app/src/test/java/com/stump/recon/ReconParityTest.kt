@@ -111,7 +111,7 @@ class ReconParityTest {
         val pub = ByteArray(64) { (it + 33).toByte() }
         val longName = "SplitPacket-Ridge-Relay-Node-270B"
         val pad = ByteArray(90) { 0x41 }
-        val app = byteArrayOf(0x92.toByte(), (0xA0 or longName.length).toByte()) + longName.toByteArray() + byteArrayOf(0x0E) + pad
+        val app = byteArrayOf(0x92.toByte(), 0xD9.toByte(), longName.length.toByte()) + longName.toByteArray() + byteArrayOf(0x0E) + pad
         val full = buildRnsAnnounce(0x01, 2, "lxmf.delivery", pub, null, app)
         assertTrue(full.size > 255)
 
